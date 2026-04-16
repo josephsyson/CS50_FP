@@ -1,10 +1,11 @@
 import requests  # type: ignore
 import re
 from datetime import date, timedelta
+import math
 
 
 def main():
-    find_neo(check_input())
+    NEO_Grouping(find_neo(check_input()))
 
 
 def check_input():  # receives the user input and checks that it is valid as well as accepted by the API
@@ -43,7 +44,14 @@ def check_input():  # receives the user input and checks that it is valid as wel
     user_end_date = input("Enter End Date (YYYY-MM-DD): ")  # end date input
     end_year, end_month, end_day = map(int, user_end_date.split("-"))
     while True:
-        if (date(end_year, end_month, end_day) >= date(start_year, start_month, start_day) and  (date(end_year, end_month, end_day) - date(start_year, start_month, start_day)).days <= 7
+        if (
+            date(end_year, end_month, end_day)
+            >= date(start_year, start_month, start_day)
+            and (
+                date(end_year, end_month, end_day)
+                - date(start_year, start_month, start_day)
+            ).days
+            <= 7
         ):  # Checks that the end date is after the start date as well as that they are within 7 days of each other
             if re.fullmatch(r"^\d{4}-\d{2}-\d{2}$", user_end_date):
                 if (
@@ -105,7 +113,18 @@ def check_input():  # receives the user input and checks that it is valid as wel
                 "Invalid API Key format. Please Re-enter API Key: "
             )  # Accounts for any other error codes - may need to be updated to account for any other error codes that may arise
 
-    return [NEO_Web_link, user_start_date, user_end_date, start_year, start_month, start_day, end_year, end_month, end_day, user_API_key]  # returns the API link and the user inputs for use in the rest of the program. # 0 = API link, 1 = start date, 2 = end date, 3 = start year, 4 = start month, 5 = start day, 6 = end year, 7 = end month, 8 = end day, 9 = API key
+    return [
+        NEO_Web_link,
+        user_start_date,
+        user_end_date,
+        start_year,
+        start_month,
+        start_day,
+        end_year,
+        end_month,
+        end_day,
+        user_API_key,
+    ]  # returns the API link and the user inputs for use in the rest of the program. # 0 = API link, 1 = start date, 2 = end date, 3 = start year, 4 = start month, 5 = start day, 6 = end year, 7 = end month, 8 = end day, 9 = API key
 
 
 def validate_date(
@@ -132,41 +151,78 @@ def find_neo(
 ):  # this function will retrieve the data about NEOs from the NASA API which will then be used for the rest of the programs calculations. The plan is to organize certain data about each NEO in a time frame and store them in a list which will allow for organized access to the data for the rest of the program.
     Start_Date = date(Check_Input_Data[3], Check_Input_Data[4], Check_Input_Data[5])
     End_Date = date(Check_Input_Data[6], Check_Input_Data[7], Check_Input_Data[8])
-    NEO_Web = requests.get(Check_Input_Data[0])
-    NEO_date = NEO_Web.json()
+    NEO_Web_API = requests.get(Check_Input_Data[0])
+    NEO_json = NEO_Web_API.json()
     # These are the lists which will store the data about the NEOs, the same positional argument in each list will correspond to the same NEO, for example, the NEO with ID_List[0] will have a diameter of Diameter_List[0], a relative velocity of Relative_Velocity_List[0], and a miss distance of Miss_Distance_List[0]:
-    ID_List = [] 
-    Diameter_List = []
-    Relative_Velocity_List = []
-    Miss_Distance_List = []
-    Eccentricity_List = []
-    Inclination_List = []
-    Orbital_Period_List = []
-    while Start_Date <= End_Date: # Loops through the NEO - Feed API for all the dates within a specific time frame. Retrieves the IDs, calculates the average diameter by using the max and min diameter (meters) and dividing by 2, lists the relative velocity (km/h), and the miss distance (km) for each NEO and stores them in their respective lists.
+    ID_List = [] # ID of each NEO
+    NEO_Name_List = [] # Name of each NEO
+    Semi_Major_Axis_List = [] # Semi Majoral Axis of each NEO (a)
+    Eccentricity_List = [] # Eccentricity of each NEO (e)
+    Inclination_List = [] # Inclination of each NEO (i)
+    Perihelion_Distance_List = [] # Perihelion Distance of each NEO (q)
+    Aphelion_Distance_List = [] # Aphelion Distance of each NEO (Q)
+    Diameter_List = [] # Diameter of each NEO (m)
+    Relative_Velocity_List = [] # Relative Velocity of each NEO (km/h)
+    Miss_Distance_List = [] # Miss Distance of each NEO (km)
+    Orbital_Period_List = [] # Orbital Period of each NEO (days)
+    while (
+        Start_Date <= End_Date
+    ):  # Loops through the NEO - Feed API for all the dates within a specific time frame. Retrieves the IDs, calculates the average diameter by using the max and min diameter (meters) and dividing by 2, lists the relative velocity (km/h), and the miss distance (km) for each NEO and stores them in their respective lists.
         date_key = str(Start_Date)
-        for neo in NEO_date["near_earth_objects"][date_key]:
-            ID_List.append(neo["id"])
-            Diameter_List.append((float(neo["estimated_diameter"]["meters"]["estimated_diameter_min"]) + float(neo["estimated_diameter"]["meters"]["estimated_diameter_max"])) / 2)
-            Relative_Velocity_List.append(float(neo["close_approach_data"][0]["relative_velocity"]["kilometers_per_hour"]))
-            Miss_Distance_List.append(float(neo["close_approach_data"][0]["miss_distance"]["kilometers"]))
-        Start_Date +=timedelta(days=1)
+        for NEO in NEO_json["near_earth_objects"][date_key]:
+            ID_List.append(NEO["id"])
+            NEO_Name_List.append(NEO["name"])
+            Individual_NEO_Data_API = requests.get(
+                "https://api.nasa.gov/neo/rest/v1/neo/"
+                + NEO["id"]
+                + "?api_key="
+                + Check_Input_Data[9])
+            Individual_NEO_Data_Json = Individual_NEO_Data_API.json()
+            Semi_Major_Axis_List.append(Individual_NEO_Data_Json["orbital_data"]["semi_major_axis"])
+            Eccentricity_List.append(Individual_NEO_Data_Json["orbital_data"]["eccentricity"])
+            Inclination_List.append(Individual_NEO_Data_Json["orbital_data"]["inclination"])
+            Perihelion_Distance_List.append(Individual_NEO_Data_Json["orbital_data"]["perihelion_distance"])
+            Aphelion_Distance_List.append(Individual_NEO_Data_Json["orbital_data"]["aphelion_distance"])
 
-        for ID in ID_List:
-            Individual_NEO_Data = requests.get("https://api.nasa.gov/neo/rest/v1/neo/" + ID + "?api_key=" + Check_Input_Data[9]) #This is the link for the NEO - Lookup API which retrieves more in-depth data about each NEO. This will be used to find the values of eccentricity, inclination, and orbital period for each NEO within the ID_List.
-            Individual_NEO_JSON = Individual_NEO_Data.json()
-            Eccentricity_List.append(float(Individual_NEO_JSON["orbital_data"]["eccentricity"]))
-            Inclination_List.append(float(Individual_NEO_JSON["orbital_data"]["inclination"]))
-            Orbital_Period_List.append(float(Individual_NEO_JSON["orbital_data"]["orbital_period"]))
+            Start_Date += timedelta(days=1)
+    NEO_Data = {"ID:": ID_List, "Name:": NEO_Name_List, "Semi Major Axis (a):": Semi_Major_Axis_List, "Eccentricity (e):": Eccentricity_List, "Inclination (i):": Inclination_List, "Perihelion Distance (q):": Perihelion_Distance_List, "Aphelion Distance (Q):": Aphelion_Distance_List}
+    return NEO_Data
 
 
-    print("ID: " + str(ID_List))
-    print("Predicted Diameter: " + str(Diameter_List))
-    print("Relative Velocity: " + str(Relative_Velocity_List))
-    print("Miss Distance: " + str(Miss_Distance_List))
-    print("Eccentricity: " + str(Eccentricity_List))
-    print("Inclination: " + str(Inclination_List))
-    print("Orbital Period: " + str(Orbital_Period_List))
+def NEO_Grouping(NEO_Data):
+    # This function will group the NEOs based on their orbital characteristics, such as their semi-major axis, eccentricity, and inclination. The NEOs can be grouped into different categories, such as Apollo, Amor, and Aten asteroids, which are based on their orbital characteristics. The grouping can provide insight into the potential impact risk of the NEOs and can help to identify any patterns or trends in the data. USE THIS WEBSITE: https://cneos.jpl.nasa.gov/about/neo_groups.html
 
+    for n in range (len(NEO_Data["ID:"])):
+        a = float(NEO_Data["Semi Major Axis (a):"][n])
+        q = float(NEO_Data["Perihelion Distance (q):"][n])
+        Q = float(NEO_Data["Aphelion Distance (Q):"][n])
+        i = float(NEO_Data["Inclination (i):"][n])
+        
+        if a < 1.0:
+            if Q < .983: # Atira Asteriod
+                print(NEO_Data["ID:"][n], NEO_Data["Name:"][n], "is an Atira Asteroid")
+            else: # Aten Asteroid
+                print(NEO_Data["ID:"][n], NEO_Data["Name:"][n], "is an Aten Asteroid")
+            
+        elif a >= 1.0:
+            if q < 1.017: # Apollo Asteroid
+                U_T(Q, i)
+            
+            elif q >= 1.017 and q < 1.3: # Amor Asteroid
+                U_T(Q, i)
+                
+            else:
+                print("Rare NEO")
+        
+# The following section of code will be the calculations for Delta V depending on the different type of NEO. I will be using the Shoemaker-Helin method for this. Here are the important equations:
+# F = U_L + U_R which is the total Delta V
+
+def U_T(Q, i):
+     # U_T is the normalized velocity used to predict the Delta V for misions to Amor and Apollo asteroids.
+     UT = (3 - (2/(Q + 1)) - (2 * math.sqrt((2 * Q) / (Q + 1))) * (math.cos(math.radians(i / 2))))
+     return UT
+
+def U_t(Q, i):
 main()
 
 # Things to add:
@@ -174,3 +230,4 @@ main()
 # - Potential Impact Risk of the NEOs
 # - delta v of the NEOs using the Hohmann Transfer Orbit which the equation is: delta_v = sqrt((2 * G * M) / r) - sqrt(G * M / r) where G is the gravitational constant, M is the mass of the Earth, and r is the distance from the NEO to the Earth. We can also use the Vis-viva equation to calculate the velocity of the NEO at different points in its orbit, which can be used to calculate the delta v required for a Hohmann transfer orbit. The Vis-viva equation is: v = sqrt(G * M * (2 / r - 1 / a)) where G is the gravitational constant, M is the mass of the Sun, r is the distance from the NEO to the Sun, and a is the semi-major axis of the NEO's orbit. We can use this equation to calculate the velocity of the NEO at its closest approach to Earth and at its farthest point from Earth, and then use those velocities to calculate the delta v required for a Hohmann transfer orbit.
 # - Angular Momentum using the cross product of the position and velocity vectors of the NEO, which can be calculated using the equation: L = r x v where L is the angular momentum, r is the position vector of the NEO relative to Earth, and v is the velocity vector of the NEO relative to Earth. We can use this equation to calculate the angular momentum of the NEO at different points in its orbit, which can provide insight into its orbital characteristics and potential impact risk.
+
