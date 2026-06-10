@@ -11,6 +11,8 @@ async def main():
     NEO_Data = await find_neo(Input_Data)
     Shoemaker_Helin_result = Shoemaker_Helin(NEO_Data)
     print(Shoemaker_Helin_result)
+    Hohmann_Transfer_result = Hohmann_Transfer(NEO_Data)
+    print(Hohmann_Transfer_result)
 
 
 def check_input():  # receives the user input and checks that it is valid as well as accepted by the API
@@ -169,6 +171,7 @@ async def find_neo(Check_Input_Data):
     Relative_Velocity_List = []  # Relative Velocity of each NEO (km/h)
     Miss_Distance_List = []  # Miss Distance of each NEO (km)
     Orbital_Period_List = []
+    Orbiting_Body_List = []  # Orbiting Body of each NEO (Earth, Mars, etc.)
 
     temp_start = Start_Date  # This loops through each day in the specified date range and retrieves the name and ID of each NEO observed on that day, storing them in their respective lists.
     while temp_start <= End_Date:
@@ -213,6 +216,11 @@ async def find_neo(Check_Input_Data):
         "Inclination (i):": Inclination_List,
         "Perihelion Distance (q):": Perihelion_Distance_List,
         "Aphelion Distance (Q):": Aphelion_Distance_List,
+        "Diameter (m):": Diameter_List,
+        "Relative Velocity (km/h):": Relative_Velocity_List,
+        "Miss Distance (km):": Miss_Distance_List,
+        "Orbital Period (days):": Orbital_Period_List,
+    
     }
     return NEO_Data
 
@@ -245,26 +253,32 @@ def Shoemaker_Helin(NEO_Data):
                 U_L_Value = U_L(U_t_sq(Q, i))
                 U_c_value = U_Aten_and_Atira(Q, i, a, e)["U_c_sq"]
                 U_r_value = U_Aten_and_Atira(Q, i, a, e)["U_r_sq"]
+                Type = "Atira"
 
             else:  # Aten Asteroid
                 U_L_Value = U_L(U_t_sq(Q, i))
                 U_c_value = U_Aten_and_Atira(Q, i, a, e)["U_c_sq"]
                 U_r_value = U_Aten_and_Atira(Q, i, a, e)["U_r_sq"]
+                Type = "Aten"
 
         elif a >= 1.0:
             if q < 1.017:  # Apollo Asteroid
                 U_L_Value = U_L(U_T_sq(q, i))
                 U_c_value = U_Apollo(q, i, a, e)["U_c_sq"]
                 U_r_value = U_Apollo(q, i, a, e)["U_r_sq"]
+                Type = "Apollo"
 
             elif 1.017 <= q < 1.3:  # Amor Asteroid
                 U_L_Value = U_L(U_T_sq(q, i))
                 U_c_value = U_Amor(q, i, a, e)["U_c_sq"]
                 U_r_value = U_Amor(q, i, a, e)["U_r_sq"]
+                Type = "Amor"
+
             else:
                 U_L_Value = U_L(U_T_sq(q, i))
                 U_c_value = U_Amor(q, i, a, e)["U_c_sq"]
                 U_r_value = U_Amor(q, i, a, e)["U_r_sq"]
+                Type = "Uncommon NEO"
             # This is an uncommon NEO - it does not fit into any of the common groups, but it can still be analyzed using the Shoemaker-Helin method to calculate its Delta V and potential impact risk. For the calculation we will use the same equations as the Amor astroids as they are more likely to be further from the sun (1 <a) and therefore will fit more closely with their corresponding equations.
 
         U_R_Value = U_R(U_c_value, U_r_value, i)
@@ -272,7 +286,7 @@ def Shoemaker_Helin(NEO_Data):
             U_L_Value + (2 * U_R_Value)
         )  # Delta_v_kmS is the minimum possible delta V for an entire round trip mission to the NEO and back to Earth.
 
-        results[Name] = Delta_V_KmS
+        results[Name] = "Asteroid Type: " + Type + ", Delta V (km/s): " + str(Delta_V_KmS)
 
     return results
 
@@ -359,5 +373,31 @@ def U_R(
     )  # Equation 4 from the 1978 Shoemaker-Helin paper
     return U_R_value
 
+def Hohmann_Transfer(NEO_Data):
+    r_1 = 149597870.7  # km, this is the average distance from the Earth to the Sun, which is used as the radius of Earth's orbit in the Hohmann transfer calculations.
+    µ = 1.32712440018e11  # km^3/s^2, this is the standard gravitational parameter of the Sun, which is used in the Hohmann transfer calculations to determine the velocities of the spacecraft at different points in the transfer orbit.
+    
+    results = {}
+
+    for n in range(len(NEO_Data["ID:"])):
+        r_2 = float(NEO_Data["Semi Major Axis (a):"][n]) * 149597870.7  # km, this is the semi-major axis of the NEO's orbit, which is used as the radius of the NEO's orbit in the Hohmann transfer calculations. The approximation assumes a circular orbit.
+        Name = NEO_Data["Name:"][n]
+
+        v_1 = math.sqrt(µ / r_1)  # km/s, this is the velocity of the spacecraft in Earth's orbit before the transfer burn, calculated using the vis-viva equation.
+        v_2 = math.sqrt(µ / r_2)  # km/s, this is the velocity of the spacecraft in the NEO's orbit after the transfer burn, calculated using the vis-viva equation.
+        
+        v_transfer_1 = math.sqrt((2 * µ) * ((1 / r_1) - (1 / (r_1 + r_2)))) # The velocity of the circular transfer orbit as it leaves the initial orbit, calculated using the vis-viva equation.
+        v_transfer_2 = math.sqrt((2 * µ) * ((1 / r_2) - (1 / (r_1 + r_2)))) # The velocity of the circular transfer orbit as it enters the final orbit, calculated using the vis-viva equation.
+
+        Δv_1 = math.fabs(v_transfer_1 - v_1)  # km/s, this is the delta V required for the first burn to leave Earth's orbit and enter the transfer orbit, calculated as the difference between the transfer orbit velocity and the initial orbit velocity.
+        Δv_2 = math.fabs(v_2 - v_transfer_2)  # km/s, this is the delta V required for the second burn to leave the transfer orbit and enter the NEO's orbit, calculated as the difference between the final orbit velocity and the transfer orbit velocity
+
+        Total_Δv = Δv_1 + Δv_2  # km/s, this is the total delta V required for the Hohmann transfer mission, calculated as the sum of the delta V for the first and second burns.
+
+        t = math.pi * math.sqrt(((r_1 + r_2) ** 3) / (8 * µ))  # seconds, this is the time of flight for the Hohmann transfer, calculated using Kepler's third law.
+        t_days = t / (60 * 60 * 24)  # days, this is the time of flight for the Hohmann transfer converted from seconds to days.
+
+        results[Name] = "Total Δv (km/s): " + str(Total_Δv) + ", Time of Flight (days): " + str(t_days)
+    return results
 
 asyncio.run(main())
